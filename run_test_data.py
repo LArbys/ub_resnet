@@ -1,3 +1,4 @@
+import sys,os
 import caffe
 import numpy as np
 import ROOT as rt
@@ -19,17 +20,18 @@ train_data = "/home/taritree/working/larbys/staged_data/resized_traindata_combin
 #test_data  = "/home/taritree/working/larbys/staged_data/resized_testdata_combinedbnbcosmics.db"
 #mean_file = "/home/taritree/working/larbys/staged_data/resized_testdata_combinedbnbcosmics_mean.bin"
 
-test_data = "/home/taritree/working/larbys/staged_data/resized_databnb.db"
-mean_file = "/home/taritree/working/larbys/staged_data/resized_databnb_mean.bin"
+#test_data = "/home/taritree/working/larbys/staged_data/resized_databnb.db"
+#mean_file = "/home/taritree/working/larbys/staged_data/resized_databnb_mean.bin"
 
 #test_data = "/home/taritree/working/larbys/staged_data/resized_databnb_set2.db"
 #mean_file = "/home/taritree/working/larbys/staged_data/resized_databnb_set2_mean.bin"
 
-root_dirs = {"eminus":"/mnt/disk0/taritree/larbys/new/single_eminus/rootfiles",
-             "muminus":"/mnt/disk0/taritree/larbys/new/single_proton/rootfiles",
-             "proton":"/mnt/disk0/taritree/larbys/new/single_muminus/rootfiles",
-             "pizero":"/mnt/disk0/taritree/larbys/new/single_pizero_bnblike/rootfiles"}
-
+#test_data = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test.db"
+#mean_file = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test_mean.bin"
+test_data = "/mnt/disk0/taritree/larbys/prepared_lmdb/bnb_data_set1.db"
+mean_file = "/mnt/disk0/taritree/larbys/prepared_lmdb/bnb_data_set1_mean.bin"
+model = "training_attempts/v2/001/snapshot_rmsprop_iter_checkpointb.caffemodel"
+deploy_prototxt  = "deploy_v2.prototxt"
 
 prototxt = deploy_prototxt
 net = caffe.Net( prototxt, model, caffe.TEST )
@@ -46,7 +48,7 @@ classlabels = binlabels.keys()
 input_shape = net.blobs["data"].data.shape
 images_per_batch = 16
 if input_shape[0]%images_per_batch!=0:
-    print "Images per Batch must be multiple"
+    print "Images per Batch must be multiple of shape. %d/%d=%d"%(input_shape[0],images_per_batch,input_shape[0]%images_per_batch)
     sys.exit(-1)
 
 
@@ -72,7 +74,7 @@ misslist = []
 missdict = {}
 totevents = 0.0
 ibatch = 0
-nbatches = 5000
+nbatches = 1000
 correct  = 0.0
 ncorrect_nu = 0
 ncorrect_bg = 0
