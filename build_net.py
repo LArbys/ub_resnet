@@ -7,32 +7,39 @@ use_batch_norm = True
 use_dropout = True
 augment_data = True
 
-def addFirstConv( net, noutput, train ):
-    net.conv1 = L.Convolution(net.data,
-                              kernel_size=7,
-                              stride=2,
-                              pad=3,
-                              num_output=noutput,
-                              weight_filler=dict(type="msra"),
-                              #group=1,
-                              bias_filler=dict(type="constant",value=0.05))
-    #param=[dict(name="conv1_w"),dict(name="conv1_b")] )
-    if use_batch_norm:
+
+def convolution_layer( net, input_layer, layername_stem, parname_stem, noutputs, stride, kernel_size, pad, init_bias, addbatchnorm=True, train=True ):
+    conv = L.Convolution( input_layer, 
+                          kernel_size=kernel_size,
+                          stride=stride,
+                          pad=pad,
+                          num_output=noutputs,
+                          weight_filler=dict(type="msra"),
+                          bias_filler=dict(type="constant",value=init_bias),
+                          param=[dict(name="par_%s_conv_w"%(parname_stem)),dict(name="par_%s_conv_b"%(parname_stem))] )
+    net.__setattr__( layername_stem+"_conv", conv )
+    if addbatchnorm:
         if train:
-            net.conv1_bn = L.BatchNorm(net.conv1,in_place=True,batch_norm_param=dict(use_global_stats=False),
-                                       param=[dict(lr_mult=0),dict(lr_mult=0),dict(lr_mult=0)])
+            conv_bn = L.BatchNorm( conv, in_place=True, batch_norm_param=dict(use_global_stats=False),param=[dict(lr_mult=0),dict(lr_mult=0),dict(lr_mult=0)])
         else:
-            net.conv1_bn = L.BatchNorm(net.conv1,in_place=True,batch_norm_param=dict(use_global_stats=True))
-        net.conv1_scale = L.Scale(net.conv1_bn,
-                                  in_place=True,
-                                  scale_param=dict(bias_term=True))
-        net.conv1_relu = L.ReLU(net.conv1_scale,in_place=True)
+            conv_bn = L.BatchNorm( conv,in_place=True,batch_norm_param=dict(use_global_stats=True))
+        conv_scale = L.Scale( conv_bn, in_place=True, scale_param=dict(bias_term=True))
+        conv_relu  = L.ReLU(conv_scale,in_place=True)
+        net.__setattr__( layername_stem+"_bn", conv_bn )
+        net.__setattr__( layername_stem+"_scale", conv_scale )
+        net.__setattr__( layername_stem+"_relu", conv_relu )
+        nxtlayer = conv_relu
     else:
-        net.conv1_relu = L.ReLU(net.conv1,in_place=True)
-    #net.conv1_dropout = L.Dropout(net.conv1_scale,
-    #                              in_place=True,
-    #                              dropout_param=dict(dropout_ratio=0.5))
-    return net.conv1_relu
+        conv_relu  = L.ReLU( conv, in_place=True )
+        net.__setattr__( layername_stem+"_relu", conv_relu )
+        nxtlayer = conv_relu
+    return nxtlayer
+
+def concat_layer( net, layername, *bots ):
+    convat = L.Concat(*bots, concat_param=dict(axis=1))
+    net.__setattr__( "%s_concat"%(layername), convat )
+    return convat
+        
     
 def final_fully_connect( net, bot, nclasses=2 ):
     net.fc2 = L.InnerProduct( bot, num_output=nclasses, weight_filler=dict(type='msra'))
@@ -127,38 +134,70 @@ def resnet_module( name, net, bot, ninput, kernel_size, stride, pad, bottleneck_
 def batchnorm_layer():
     pass
 
-def buildnet( inputdb, mean_file, batch_size, train=True ):
-    net = caffe.NetSpec()
+def data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=-1 ):
     transform_pars = {"mean_file":mean_file,
                       "mirror":False}
+    if crop_size>0:
+        transform_pars["crop_size"] = crop_size
+    if net_type in ["train","test"]:
+        net.data, net.label = L.Data(ntop=2,backend=P.Data.LMDB,source=inputdb,batch_size=batch_size,transform_param=transform_pars)
+    elif net_type=="deploy":
+        net.data, net.label = L.MemoryData(ntop=2,batch_size=batch_size, height = height, width = width, channels = nchannels)
+    return [net.data], net.label
+
+def data_layer_trimese( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=-1 ):
+    data, label = data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=crop_size )
+    slices = L.Slice(data[0], ntop=3, name="data_trimese", slice_param=dict(axis=1, slice_point=[1,2]))
+    return slices, label
+    
+
+def buildnet( inputdb, mean_file, batch_size, height, width, nchannels, net_type="train", trimese=True  ):
+    net = caffe.NetSpec()
+
+    crop_size = -1
     if augment_data:
-        transform_pars["crop_size"] = 320
-                      
-    net.data, net.label = L.Data(ntop=2,backend=P.Data.LMDB,
-                                 source=inputdb, batch_size=batch_size,
-                                 transform_param=transform_pars )
-    conv1_top = addFirstConv(net,32,train)
-    net.pool1 = L.Pooling(conv1_top, kernel_size=3, stride=2, pool=P.Pooling.MAX)
-    resnet2 = resnet_module( "resnet2", net, net.pool1, 32, 3, 1, 1,16,32, train)
-    resnet3 = resnet_module( "resnet3", net, resnet2, 32, 3, 1, 1,16,32,train)
-    resnet4 = resnet_module( "resnet4", net, resnet3, 32, 3, 1, 1,16,32,train)
+        crop_size = width
 
-    resnet5 = resnet_module( "resnet5", net, resnet4, 32, 3, 1, 1,16,64,train)
-    resnet6 = resnet_module( "resnet6", net, resnet5, 64, 3, 1, 1,16,64,train)
-    resnet7 = resnet_module( "resnet7", net, resnet6, 64, 3, 1, 1,16,64,train)
+    train = False
+    if net_type=="train":
+        train = True
 
-    resnet8 = resnet_module( "resnet8", net, resnet7, 64, 3, 1, 1,32,128,train)
-    resnet9 = resnet_module( "resnet9", net, resnet8, 128, 3, 1, 1,32,128,train)
-    resnet10 = resnet_module( "resnet10", net, resnet9, 128, 3, 1, 1,32,128,train)
+    if trimese:
+        data_layers, label = data_layer_trimese( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=crop_size )
+    else:
+        data_layers,label = data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=crop_size )
 
-    net.lastpool = L.Pooling( resnet10, kernel_size=7, stride=1, pool=P.Pooling.AVE )
+    stem = []
+    for n,l in enumerate(data_layers):
+        # no batch norm in first layers, reduces the required number of parameters
+        stem.append( convolution_layer( net, l, "plane%d"%(n), "stem_conv1", 16, 2, 7, 3, 0.05, addbatchnorm=False, train=train ) )
+    
+    concat = concat_layer( net, "stem", *stem )
+
+    #conv1_top = addFirstConv(net,32,train)
+    conv1_top = ( net, 32, train )
+    #sys.exit(-1)
+    #net.pool1 = L.Pooling(conv1_top, kernel_size=3, stride=2, pool=P.Pooling.MAX)
+    #resnet2 = resnet_module( "resnet2", net, net.pool1, 32, 3, 1, 1,16,32, train)
+    #resnet3 = resnet_module( "resnet3", net, resnet2, 32, 3, 1, 1,16,32,train)
+    #resnet4 = resnet_module( "resnet4", net, resnet3, 32, 3, 1, 1,16,32,train)
+
+    #resnet5 = resnet_module( "resnet5", net, resnet4, 32, 3, 1, 1,16,64,train)
+    #resnet6 = resnet_module( "resnet6", net, resnet5, 64, 3, 1, 1,16,64,train)
+    #resnet7 = resnet_module( "resnet7", net, resnet6, 64, 3, 1, 1,16,64,train)
+
+    #resnet8 = resnet_module( "resnet8", net, resnet7, 64, 3, 1, 1,32,128,train)
+    #resnet9 = resnet_module( "resnet9", net, resnet8, 128, 3, 1, 1,32,128,train)
+    #resnet10 = resnet_module( "resnet10", net, resnet9, 128, 3, 1, 1,32,128,train)
+
+    net.lastpool = L.Pooling( concat, kernel_size=7, stride=1, pool=P.Pooling.AVE )
     lastpool_layer = net.lastpool
-    if use_dropout:
-        net.lastpool_dropout = L.Dropout(net.lastpool,
-                                         in_place=True,
-                                         dropout_param=dict(dropout_ratio=0.5))
-        lastpool_layer = net.lastpool_dropout
-
+    #if use_dropout:
+    #    net.lastpool_dropout = L.Dropout(net.lastpool,
+    #                                     in_place=True,
+    #                                     dropout_param=dict(dropout_ratio=0.5))
+    #    lastpool_layer = net.lastpool_dropout
+    #
 
     fc2 = final_fully_connect( net, lastpool_layer )
     
@@ -180,13 +219,24 @@ if __name__ == "__main__":
     test_mean = "/home/taritree/working/larbys/staged_data/resized_testdata_combinedbnbcosmics_mean.bin"
     #testdb = "/mnt/disk0/taritree/larbys/prepared_lmdb/overfit_resized_combinedbnbcosmics_test.db"
     #test_mean = "/mnt/disk0/taritree/larbys/prepared_lmdb/overfit_resized_combinedbnbcosmics_mean_test.bin"
+    
+    traindb = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_train.db"
+    train_mean = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_train_mean.bin"
+    testdb = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test.db"
+    test_mean = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test_mean.bin"
+    
 
-    train_net = buildnet( traindb, train_mean, 32, train=True )
-    test_net  = buildnet( testdb,  test_mean, 16, train=False )
+    tri = True
+    train_net = buildnet( traindb, train_mean, 1, 700, 700, 3, net_type="train", trimese=tri )
+    test_net  = buildnet( testdb,  test_mean, 1, 700, 700, 3, net_type="test", trimese=tri )
+    deploy_net  = buildnet( testdb,  test_mean, 1, 700, 700, 3, net_type="deploy", trimese=tri )
 
-    testout = open('test.prototxt','w')
-    trainout = open('train.prototxt','w')
+    testout = open('test_v3.prototxt','w')
+    trainout = open('train_v3.prototxt','w')
+    deployout = open('deploy_v3.prototxt','w')
     print >> testout, test_net.to_proto()
     print >> trainout, train_net.to_proto()
+    print >> deployout, deploy_net.to_proto()
     testout.close()
     trainout.close()
+    deployout.close()
