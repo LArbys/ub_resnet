@@ -45,7 +45,7 @@ def final_fully_connect( net, bot, nclasses=2 ):
     net.fc2 = L.InnerProduct( bot, num_output=nclasses, weight_filler=dict(type='msra'))
     return net.fc2
 
-def resnet_module( name, net, bot, ninput, kernel_size, stride, pad, bottleneck_nout, expand_nout, train ):
+def resnet_module( net, bot, name, ninput, kernel_size, stride, pad, bottleneck_nout, expand_nout, train ):
     if ninput!=expand_nout:
         bypass_conv = L.Convolution( bot,
                                      kernel_size=1,
@@ -150,6 +150,10 @@ def data_layer_trimese( net, inputdb, mean_file, batch_size, net_type, height, w
     slices = L.Slice(data[0], ntop=3, name="data_trimese", slice_param=dict(axis=1, slice_point=[1,2]))
     return slices, label
     
+def pool_layer( net, inputlayer, layername, kernel_size, stride ):
+    pooll = L.Pooling(inputlayer, kernel_size=kernel_size, stride=stride, pool=P.Pooling.MAX)
+    net.__setattr__( layername, pooll )
+    return pooll
 
 def buildnet( inputdb, mean_file, batch_size, height, width, nchannels, net_type="train", trimese=True  ):
     net = caffe.NetSpec()
@@ -167,15 +171,25 @@ def buildnet( inputdb, mean_file, batch_size, height, width, nchannels, net_type
     else:
         data_layers,label = data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=crop_size )
 
-    stem = []
+    tri = []
     for n,l in enumerate(data_layers):
         # no batch norm in first layers, reduces the required number of parameters
-        stem.append( convolution_layer( net, l, "plane%d"%(n), "stem_conv1", 16, 2, 7, 3, 0.05, addbatchnorm=False, train=train ) )
+
+        # First conv  layer
+        conv1 = convolution_layer( net, l, "plane%d_conv1"%(n), "tri_conv1", 16, 2, 7, 3, 0.05, addbatchnorm=True, train=train )
+        pool1 = pool_layer( net, conv1, "plane%d_pool1"%(n), 3, 2 )
+        # resnet layers
+        resnet2 = resnet_module( net, pool1,   "plane%d_resnet2"%(n), 16, 3, 1, 1,8,32, train)
+        resnet3 = resnet_module( net, resnet2, "plane%d_resnet3"%(n), 32, 3, 1, 1,8,32, train)
+        resnet4 = resnet_module( net, resnet3, "plane%d_resnet4"%(n), 32, 3, 1, 1,8,32, train)
+        
+        tri.append( resnet4 )
+        
     
-    concat = concat_layer( net, "stem", *stem )
+    concat = concat_layer( net, "mergeplanes", *tri )
 
     #conv1_top = addFirstConv(net,32,train)
-    conv1_top = ( net, 32, train )
+    #conv1_top = ( net, 32, train )
     #sys.exit(-1)
     #net.pool1 = L.Pooling(conv1_top, kernel_size=3, stride=2, pool=P.Pooling.MAX)
     #resnet2 = resnet_module( "resnet2", net, net.pool1, 32, 3, 1, 1,16,32, train)
@@ -192,12 +206,12 @@ def buildnet( inputdb, mean_file, batch_size, height, width, nchannels, net_type
 
     net.lastpool = L.Pooling( concat, kernel_size=7, stride=1, pool=P.Pooling.AVE )
     lastpool_layer = net.lastpool
-    #if use_dropout:
-    #    net.lastpool_dropout = L.Dropout(net.lastpool,
-    #                                     in_place=True,
-    #                                     dropout_param=dict(dropout_ratio=0.5))
-    #    lastpool_layer = net.lastpool_dropout
-    #
+    if use_dropout:
+        net.lastpool_dropout = L.Dropout(net.lastpool,
+                                         in_place=True,
+                                         dropout_param=dict(dropout_ratio=0.5))
+        lastpool_layer = net.lastpool_dropout
+    
 
     fc2 = final_fully_connect( net, lastpool_layer )
     
@@ -227,9 +241,9 @@ if __name__ == "__main__":
     
 
     tri = True
-    train_net = buildnet( traindb, train_mean, 1, 700, 700, 3, net_type="train", trimese=tri )
-    test_net  = buildnet( testdb,  test_mean, 1, 700, 700, 3, net_type="test", trimese=tri )
-    deploy_net  = buildnet( testdb,  test_mean, 1, 700, 700, 3, net_type="deploy", trimese=tri )
+    train_net = buildnet( traindb, train_mean, 1, 768, 768, 3, net_type="train", trimese=tri )
+    test_net  = buildnet( testdb,  test_mean, 1, 768, 768, 3, net_type="test", trimese=tri )
+    deploy_net  = buildnet( testdb,  test_mean, 1, 768, 768, 3, net_type="deploy", trimese=tri )
 
     testout = open('test_v3.prototxt','w')
     trainout = open('train_v3.prototxt','w')
