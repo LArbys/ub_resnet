@@ -26,10 +26,11 @@ train_data = "/home/taritree/working/larbys/staged_data/resized_traindata_combin
 #test_data = "/home/taritree/working/larbys/staged_data/resized_databnb_set2.db"
 #mean_file = "/home/taritree/working/larbys/staged_data/resized_databnb_set2_mean.bin"
 
-#test_data = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test.db"
-#mean_file = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test_mean.bin"
-test_data = "/mnt/disk0/taritree/larbys/prepared_lmdb/bnb_data_set1.db"
-mean_file = "/mnt/disk0/taritree/larbys/prepared_lmdb/bnb_data_set1_mean.bin"
+# 768x768 padding
+test_data = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test.db"
+mean_file = "/mnt/disk0/taritree/larbys/prepared_lmdb/ccqe_combined_extbnbcosmic_mcc7nu_test_mean.bin"
+#test_data = "/mnt/disk0/taritree/larbys/prepared_lmdb/bnb_data_set1.db"
+#mean_file = "/mnt/disk0/taritree/larbys/prepared_lmdb/bnb_data_set1_mean.bin"
 model = "training_attempts/v2/001/snapshot_rmsprop_iter_checkpointb.caffemodel"
 deploy_prototxt  = "deploy_v2.prototxt"
 
@@ -46,11 +47,11 @@ binlabels = {0:"background",1:"neutrino"}
 classlabels = binlabels.keys()
 
 input_shape = net.blobs["data"].data.shape
-images_per_batch = 16
+images_per_batch = 1
 if input_shape[0]%images_per_batch!=0:
     print "Images per Batch must be multiple of shape. %d/%d=%d"%(input_shape[0],images_per_batch,input_shape[0]%images_per_batch)
     sys.exit(-1)
-
+print "We will process %d images per batch. Take ave. of %d images for the prob."%(input_shape[0]/images_per_batch,images_per_batch)
 
 # ROOT data
 print "[ENTER] to continue."
@@ -74,7 +75,7 @@ misslist = []
 missdict = {}
 totevents = 0.0
 ibatch = 0
-nbatches = 1000
+nbatches = 5000
 correct  = 0.0
 ncorrect_nu = 0
 ncorrect_bg = 0
@@ -119,8 +120,13 @@ while not outofentries:
         for n in range(0,images_per_batch):
             if nfilled>=input_shape[0]:
                 break
-            xoffset = int(np.random.rand()*(vec.shape[1]-input_shape[2]-1))
-            yoffset = int(np.random.rand()*(vec.shape[2]-input_shape[3]-1))
+            if images_per_batch>1:
+                xoffset = int(np.random.rand()*(vec.shape[1]-input_shape[2]-1))
+                yoffset = int(np.random.rand()*(vec.shape[2]-input_shape[3]-1))
+            else:
+                # if only 1 image, center crop
+                xoffset = int(0.5*(vec.shape[1]-input_shape[2]-1))
+                yoffset = int(0.5*(vec.shape[2]-input_shape[3]-1))
             x1 = xoffset
             x2 = x1 + input_shape[2]
             y1 = yoffset
@@ -159,10 +165,11 @@ while not outofentries:
         #score = scores[most_nu]
         hclassfre.Fill( ilabel )
         print "group ",group,":",labels,scores,probs
-        print >> resultlog,key,decision,prob[1]
+        print >> resultlog,key,decision,prob[1],ilabel
 
         totevents += 1.0
         print "label=",ilabel," vs. decision=",decision
+        herrmat.Fill( ilabel, decision )
         if ilabel==decision:
             correct += 1.0
             hclassacc.Fill( ilabel )
@@ -174,7 +181,7 @@ while not outofentries:
             print "Miss: ",key,ilabel,np.argmax(score)
             misslist.append( (binlabels[ilabel],key) )
             missdict[ (binlabels[ilabel],key) ] = {"key":key,"truth_label":ilabel,"decision":int(np.argmax(score)),"nuprob":prob[1]}
-            herrmat.Fill( ilabel, decision )
+
         if ilabel==0:
             hnuprob_cosmics.Fill( prob[1] )
             ntotal_bg += 1

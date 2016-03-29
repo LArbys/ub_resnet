@@ -3,10 +3,11 @@ sys.argv.append("-b")
 import ROOT as rt
 import numpy as np
 
-ntraining = 46527
+#ntraining = 46527
+ntraining = 28000
 #nevents_per_iteration = 220
 #nevents_per_iteration = 128
-nevents_per_iteration = 32
+nevents_per_iteration = 8
 
 iters_per_point = 20
 test_iters_per_point = 100
