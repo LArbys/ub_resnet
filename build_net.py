@@ -7,7 +7,6 @@ use_batch_norm = True
 use_dropout = True
 augment_data = True
 
-
 def convolution_layer( net, input_layer, layername_stem, parname_stem, noutputs, stride, kernel_size, pad, init_bias, addbatchnorm=True, train=True ):
     conv = L.Convolution( input_layer, 
                           kernel_size=kernel_size,
@@ -154,6 +153,7 @@ def pool_layer( net, inputlayer, layername, kernel_size, stride ):
     pooll = L.Pooling(inputlayer, kernel_size=kernel_size, stride=stride, pool=P.Pooling.MAX)
     net.__setattr__( layername, pooll )
     return pooll
+
 
 def buildnet( inputdb, mean_file, batch_size, height, width, nchannels, net_type="train", trimese=True  ):
     net = caffe.NetSpec()
