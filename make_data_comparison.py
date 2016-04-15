@@ -5,7 +5,7 @@ from math import sqrt
 c = rt.TCanvas("c","c",800,400)
 c.Draw()
 
-set = "ubresnet10"
+set = "ubtrimese"
 
 f_test = rt.TFile("results/"+set+"/out_netanalysis_testdata.root","OPEN")
 f_data = rt.TFile("results/"+set+"/out_netanalysis_databnb_set1.root","OPEN")

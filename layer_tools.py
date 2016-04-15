@@ -139,9 +139,12 @@ def data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, w
         net.data, net.label = L.MemoryData(ntop=2,batch_size=batch_size, height = height, width = width, channels = nchannels)
     return [net.data], net.label
 
-def data_layer_trimese( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=-1 ):
+def data_layer_trimese( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, slice_points, crop_size=-1 ):
     data, label = data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=crop_size )
-    slices = L.Slice(data[0], ntop=3, name="data_trimese", slice_param=dict(axis=1, slice_point=[1,2]))
+    slices = L.Slice(data[0], ntop=3, name="data_trimese", slice_param=dict(axis=1, slice_point=slice_points))
+    #for n,slice in enumerate(slices):
+    #    net.__setattr__( slice, "data_plane%d"%(n) )
+
     return slices, label
     
 def pool_layer( net, inputlayer, layername, kernel_size, stride, pooltype=P.Pooling.MAX ):

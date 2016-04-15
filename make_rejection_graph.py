@@ -1,11 +1,16 @@
 import os,sys
 import ROOT as rt
 
+ccdf = rt.TCanvas("ccdf","ccdf",1200,600)
+ccdf.Divide(2,1)
+
 c = rt.TCanvas("c","c",1400,1400)
 c.Draw()
 
 #f = rt.TFile("results/v2_768x768/out_netanalysis_testdata.root","OPEN")
-f = rt.TFile("results/ubresnet10/out_netanalysis_testdata.root","OPEN")
+#f = rt.TFile("results/ubresnet10/out_netanalysis_testdata.root","OPEN")
+#f = rt.TFile("out_netanalysis_ubt_test.root","OPEN")
+f = rt.TFile("out_netanalysis.root","OPEN")
 hnu = f.Get("hnuprob_nu")
 hbg = f.Get("hnuprob_cosmics")
 hbg.SetLineColor(rt.kBlack)
@@ -54,6 +59,7 @@ else:
     hnu.Draw()
     hbg.Draw("same")
 
+
 c.cd(2)
 g.Draw("ALP")
 g.SetTitle(";neutrino efficiency;cosmics remaining")
@@ -68,4 +74,26 @@ gsr2.SetTitle(";neutrino prob. cut;est. Nu:Cosmic Ratio")
 
 c.Update()
 #c.SaveAs("test_performance.png")
+
+ccdf.Draw()
+
+hcdf_bg = hnu.Clone( "hcdf_bg" )
+hcdf_bg.Reset()
+hcdf_nu = hnu.Clone( "hcdf_nu" )
+hcdf_nu.Reset()
+
+ccdf.cd(1)
+for b in range(1,hcdf_bg.GetXaxis().GetNbins()+1):
+    tot = 1.0 - hbg.Integral(1,b)
+    hcdf_bg.SetBinContent( b, tot )
+hcdf_bg.Draw()
+
+ccdf.cd(2)
+for b in range(1,hcdf_nu.GetXaxis().GetNbins()+1):
+    tot = 1.0 - hnu.Integral(1,b)
+    hcdf_nu.SetBinContent( b, tot )
+hcdf_nu.Draw()
+
+ccdf.Update()
+
 raw_input()
