@@ -21,7 +21,7 @@ def buildnet( inputdb, mean_file, batch_size, height, width, nchannels, net_type
     if net_type=="train":
         train = True
 
-    data_layers,label = lt.data_layer_stacked( net, inputdb, mean_file, batch_size, net_type, height, width, nchannels, crop_size=crop_size )
+    data_layers,label = lt.root_data_layer( net, "filler.cfg", net_type, batch_size )
 
     # First conv  layer
     conv1 = lt.convolution_layer( net, data_layers[0], "conv1", "conv1", 16, 2, 7, 3, 0.05, addbatchnorm=True, train=train )

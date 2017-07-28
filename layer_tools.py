@@ -167,3 +167,7 @@ def slice_layer(net, layername, inputlayer, axis, slice_points):
     for n,slic in enumerate(slices):
 	net.__setattr__(layername+"_%d"%(n), slic)
     return slices
+
+def root_data_layer( net, filler_config, filler_name, batch_size ):
+    net.data, net.label = L.ROOTDataLayer( ntop=2, root_data_param=dict(batch_size=batch_size, filler_config=filler_config, filler_name=filler_name) )
+    return [net.data], net.label
