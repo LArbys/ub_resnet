@@ -48,7 +48,7 @@ def resnet_module( net, bot, name, ninput, kernel_size, stride, pad, bottleneck_
                                      pad=0,
                                      bias_term=False,
                                      weight_filler=dict(type="msra"),
-                                     param=[dict(name="par_%s_bypass_conv_w"%(parname_stem)),dict(name="par_%s_bypass_conv_b"%(parname_stem))])
+                                     param=[dict(name="par_%s_bypass_conv_w"%(parname_stem))] )
         if use_batch_norm:
             if train:
                 bypass_bn = L.BatchNorm(bypass_conv,in_place=True,batch_norm_param=dict(use_global_stats=False),
@@ -66,7 +66,10 @@ def resnet_module( net, bot, name, ninput, kernel_size, stride, pad, bottleneck_
         bypass_layer  = bot
 
     # bottle neck
-    bottleneck_layer = L.Convolution(bot,num_output=bottleneck_nout,kernel_size=1,stride=1,pad=0,bias_term=False,weight_filler=dict(type="msra"), param=[dict(name="par_%s_bottleneck_conv_w"%(parname_stem)),dict(name="par_%s_bottleneck_conv_b"%(parname_stem))])
+    bottleneck_layer = L.Convolution(bot,num_output=bottleneck_nout,
+                                     kernel_size=1,stride=1,pad=0,
+                                     bias_term=False,weight_filler=dict(type="msra"),
+                                     param=[dict(name="par_%s_bottleneck_conv_w"%(parname_stem))])
     if use_batch_norm:
         if train:
             bottleneck_bn    = L.BatchNorm(bottleneck_layer,in_place=True,batch_norm_param=dict(use_global_stats=False),
@@ -84,7 +87,11 @@ def resnet_module( net, bot, name, ninput, kernel_size, stride, pad, bottleneck_
     net.__setattr__(name+"_btlnk_relu",bottleneck_relu)
 
     # conv
-    conv_layer = L.Convolution(bottleneck_relu,num_output=bottleneck_nout,kernel_size=3,stride=1,pad=1,bias_term=False,weight_filler=dict(type="msra"),param=[dict(name="par_%s_conv_w"%(parname_stem)),dict(name="par_%s_conv_b"%(parname_stem))])
+    conv_layer = L.Convolution(bottleneck_relu,num_output=bottleneck_nout,
+                               kernel_size=3,stride=1,pad=1,
+                               bias_term=False,
+                               weight_filler=dict(type="msra"),
+                               param=[dict(name="par_%s_conv_w"%(parname_stem))])
     if use_batch_norm:
         if train:
             conv_bn    = L.BatchNorm(conv_layer,in_place=True,batch_norm_param=dict(use_global_stats=False),
@@ -102,7 +109,10 @@ def resnet_module( net, bot, name, ninput, kernel_size, stride, pad, bottleneck_
     net.__setattr__(name+"_conv_relu",conv_relu)
 
     # expand
-    expand_layer = L.Convolution(conv_relu,num_output=expand_nout,kernel_size=1,stride=1,pad=0,bias_term=False,weight_filler=dict(type="msra"), param=[dict(name="par_%s_expand_conv_w"%(parname_stem)),dict(name="par_%s_expand_conv_b"%(parname_stem))])
+    expand_layer = L.Convolution(conv_relu,num_output=expand_nout,kernel_size=1,stride=1,pad=0,
+                                 bias_term=False,
+                                 weight_filler=dict(type="msra"),
+                                 param=[dict(name="par_%s_expand_conv_w"%(parname_stem))])
     ex_last_layer = expand_layer
     if use_batch_norm:
         if train:
@@ -122,7 +132,6 @@ def resnet_module( net, bot, name, ninput, kernel_size, stride, pad, bottleneck_
     elt_relu  = L.ReLU( elt_layer,in_place=True)
     net.__setattr__(name+"_eltwise",elt_layer)
     net.__setattr__(name+"_eltwise_relu",elt_relu)
-    
 
     return elt_relu
                                       
